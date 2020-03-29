@@ -15,7 +15,7 @@ public Plugin myinfo =
 	name = "Entry Song",
 	author = "xSLOW",
 	description = "Set your own custom entry song",
-	version = "1.0",
+	version = "1.1a",
 	url = "https://steamcommunity.com/profiles/76561193897443537"
 };
 
@@ -27,7 +27,7 @@ char g_sSteamIds[256][32];
 
 int g_iEntrySongsCounter;
 
-bool g_bEntrySongsBool[MAXPLAYERS+1] = true;
+bool g_bEntrySongsBool[MAXPLAYERS+1];
 
 Handle g_hEntrySongBool_Cookie = INVALID_HANDLE;
 
@@ -38,7 +38,20 @@ public void OnPluginStart()
 {
     RegConsoleCmd("sm_entrysong", Command_EntrySong);
     RegConsoleCmd("sm_entrysongs", Command_EntrySong);
+    RegAdminCmd("sm_entrysongs_reloadcfg", Command_ReloadCfg, ADMFLAG_ROOT);
     g_hEntrySongBool_Cookie = RegClientCookie("Entry Song", "Turn it ON/OFF", CookieAccess_Private);
+
+
+
+
+    for(int iClient = 1; iClient <= MaxClients; iClient++)
+    {
+        if(IsClientValid(iClient))
+        {
+            g_bEntrySongsBool[iClient] = false;
+            OnClientCookiesCached(iClient);
+        }
+    }
 }
 
 
@@ -47,7 +60,15 @@ public void OnPluginStart()
 public void OnMapStart()
 {
     LoadConfigEntrySongs();
-    EntrySongs_Cache();
+
+    for(int iClient = 1; iClient <= MaxClients; iClient++)
+    {
+        if(IsClientValid(iClient))
+        {
+            g_bEntrySongsBool[iClient] = false;
+            OnClientCookiesCached(iClient);
+        }
+    }
 }
 
 // ************************** COMMAND_ENTRYSONG *************************** 
@@ -58,27 +79,69 @@ public Action Command_EntrySong(int client, int args)
         ShowMenu(client);
 }
 
+// ************************** Command_ReloadCfg *************************** 
+
+public Action Command_ReloadCfg(int client, int args) 
+{
+    LoadConfigEntrySongs();
+    ReplyToCommand(client, "Reloaded config file.");
+}
+
 // ************************** OnClientPostAdmiCheck *************************** 
 
 public void OnClientPostAdminCheck(int client)
 {
     if(IsClientValid(client))
     {
+        g_bEntrySongsBool[client] = false;
+        OnClientCookiesCached(client);
+        
+        CreateTimer(GetRandomFloat(5.0, 10.0), Timer_PlaySong, GetClientUserId(client));
+    }
+}
+
+// ************************** Timer to play song after OnClientPostAdminCheck ***************************
+
+public Action Timer_PlaySong(Handle timer, any userid)
+{
+    int client = GetClientOfUserId(userid);
+    if(IsClientValid(client))
+    {
         char pSTEAMID[32];
         GetClientAuthId(client, AuthId_Steam2, pSTEAMID, sizeof(pSTEAMID));
+        CleanSteamId(pSTEAMID);
         for (int i = 0; i < g_iEntrySongsCounter; i++)
         {
             if(StrEqual(pSTEAMID, g_sSteamIds[i]))
             {
-                char pSONG[128];
-                Format(pSONG, sizeof(pSONG), "*/%s", g_sEntrySongs[i]);
-                DataPack pack;
-                CreateDataTimer(GetRandomFloat(3.0, 15.0), Timer_SendSong, pack);
-                pack.WriteCell(client);
-                pack.WriteString(pSONG);
+                if(g_bEntrySongsBool[client])
+                {
+                    char pSONG[128];
+                    Format(pSONG, sizeof(pSONG), "*/%s", g_sEntrySongs[i]);
+                    for(int iClient = 1; iClient <= MaxClients; iClient++)
+                    {
+                        if(IsClientValid(iClient) && g_bEntrySongsBool[iClient])
+                        {
+                            for (int j = 0; j < g_iEntrySongsCounter; j++)
+                            {
+                                char SongsLoop[128];
+                                Format(SongsLoop, sizeof(SongsLoop), "*/%s", g_sEntrySongs[j]);
+                                StopSound(iClient, SNDCHAN_STATIC, SongsLoop);
+
+                                if(j == g_iEntrySongsCounter-1)
+                                {
+                                    EmitSoundToClient(iClient, pSONG, _, _, _, _, 1.0);
+                                    PrintToChat(iClient, " \x07*****************************");
+                                    PrintToChat(iClient, " \x01Playing \x10%N\'s \x01song!", client);
+                                    PrintToChat(iClient, " \x07*****************************");
+                                    PrintToChat(iClient, " \x01* You can disable these songs by using \x10!entrysongs");
+                                }   
+                            }
+                        }
+                    }
+                }
             }
         }
-        CreateTimer(5.0, Timer_OpenMenu, GetClientUserId(client));
     }
 }
 
@@ -88,7 +151,7 @@ public Action Timer_OpenMenu(Handle timer, any userid)
 {
     int client = GetClientOfUserId(userid);
 
-    if(AreClientCookiesCached(client))
+    if(IsClientValid(client))
     {
         char cBuffer[8];
         GetClientCookie(client, g_hEntrySongBool_Cookie, cBuffer, sizeof(cBuffer));
@@ -100,29 +163,6 @@ public Action Timer_OpenMenu(Handle timer, any userid)
 }
 
 
-// ************************** Timer_SendSong *************************** 
-
-public Action Timer_SendSong(Handle timer, DataPack pack)
-{
-    char pSong[128];
-    int client;
-    pack.Reset();
-    client = pack.ReadCell();
-    pack.ReadString(pSong, sizeof(pSong));
-
-    for(int iClient = 1; iClient <= MaxClients; iClient++)
-    {
-        if(IsClientValid(iClient) && g_bEntrySongsBool[iClient])
-        {
-            StopSound(iClient, SNDCHAN_STATIC, pSong);
-            EmitSoundToClient(iClient, pSong, SOUND_FROM_PLAYER, SNDCHAN_STATIC, SNDLEVEL_NONE, _, 1.0);
-            PrintToChat(iClient, " \x07*****************************");
-            PrintToChat(iClient, " \x01Playing \x10%N\'s \x01song!", client);
-            PrintToChat(iClient, " \x07*****************************");
-            PrintToChat(iClient, " \x01* You can disable these songs by using \x10!entrysongs");
-        }
-    }
-}
 
 // ************************** LOAD CFG FILE *************************** 
 
@@ -145,12 +185,14 @@ public void LoadConfigEntrySongs()
 	    {
             KvGetString(kv, "Song", SongPath, 255);
             kv.GetSectionName(SteamID, sizeof(SteamID));
+            CleanSteamId(SteamID);
             strcopy(g_sEntrySongs[g_iEntrySongsCounter], sizeof(g_sEntrySongs[]), SongPath);
             strcopy(g_sSteamIds[g_iEntrySongsCounter], sizeof(g_sSteamIds[]), SteamID);
             g_iEntrySongsCounter++;
 	    } while (kv.GotoNextKey());
         delete kv;
 
+        EntrySongs_Cache();
     }
     else SetFailState("Config files not found. Check if config files are missing.");
 }
@@ -206,21 +248,13 @@ public int ShowMenuHandler(Menu EntrySongMenu, MenuAction action, int param1, in
 	    		if(StrEqual(info, "Yes"))
 	    		{
                     PrintToChat(client, "* \x04[ON]\x01 - You can change your preference later by typing \x10!entrysongs");
-                    if(AreClientCookiesCached(client))
-                    {
-                        SetClientCookie(client, g_hEntrySongBool_Cookie, "1");
-                    }
-                    else PrintToChatAll(" \x02Database NOT loaded. Settings not saved. Try again later.");
+                    SetClientCookie(client, g_hEntrySongBool_Cookie, "1");
                     g_bEntrySongsBool[client] = true;
 	    		}
 	    		else if(StrEqual(info, "No"))
                 {
                     PrintToChat(client, "* \x02[OFF]\x01 - You can change your preference later by typing \x10!entrysongs");
-                    if(AreClientCookiesCached(client))
-                    {
-                        SetClientCookie(client, g_hEntrySongBool_Cookie, "0");
-                    }
-                    else PrintToChatAll(" \x02Database NOT loaded. Settings not saved. Try again later.");
+                    SetClientCookie(client, g_hEntrySongBool_Cookie, "0");
                     g_bEntrySongsBool[client] = false;
                 }
 	    	}
@@ -265,4 +299,11 @@ stock void FakePrecacheSound(const char[] szPath)
 stock bool IsClientValid(int client)
 {
     return (0 < client <= MaxClients) && IsClientInGame(client) && !IsFakeClient(client);
+}
+
+stock char CleanSteamId(char steamid[32])
+{
+    ReplaceString(steamid, sizeof(steamid), "STEAM_0:1:", "", false); ReplaceString(steamid, sizeof(steamid), "STEAM_1:1:", "", false);
+    ReplaceString(steamid, sizeof(steamid), "STEAM_1:0:", "", false); ReplaceString(steamid, sizeof(steamid), "STEAM_0:0:", "", false);
+    return steamid;
 }
