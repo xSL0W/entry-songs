@@ -15,7 +15,7 @@ public Plugin myinfo =
 	name = "Entry Song",
 	author = "xSLOW",
 	description = "Set your own custom entry song",
-	version = "1.1a",
+	version = "1.2",
 	url = "https://steamcommunity.com/profiles/76561193897443537"
 };
 
@@ -41,14 +41,10 @@ public void OnPluginStart()
     RegAdminCmd("sm_entrysongs_reloadcfg", Command_ReloadCfg, ADMFLAG_ROOT);
     g_hEntrySongBool_Cookie = RegClientCookie("Entry Song", "Turn it ON/OFF", CookieAccess_Private);
 
-
-
-
     for(int iClient = 1; iClient <= MaxClients; iClient++)
     {
         if(IsClientValid(iClient))
         {
-            g_bEntrySongsBool[iClient] = false;
             OnClientCookiesCached(iClient);
         }
     }
@@ -65,7 +61,6 @@ public void OnMapStart()
     {
         if(IsClientValid(iClient))
         {
-            g_bEntrySongsBool[iClient] = false;
             OnClientCookiesCached(iClient);
         }
     }
@@ -93,7 +88,6 @@ public void OnClientPostAdminCheck(int client)
 {
     if(IsClientValid(client))
     {
-        g_bEntrySongsBool[client] = false;
         OnClientCookiesCached(client);
         
         CreateTimer(GetRandomFloat(5.0, 10.0), Timer_PlaySong, GetClientUserId(client));
@@ -273,6 +267,7 @@ public void OnClientCookiesCached(int client)
 {
     if(IsClientValid(client))
     {
+        g_bEntrySongsBool[client] = false;
         char cBuffer[8];
         GetClientCookie(client, g_hEntrySongBool_Cookie, cBuffer, sizeof(cBuffer));
 
@@ -280,10 +275,10 @@ public void OnClientCookiesCached(int client)
         {
             g_bEntrySongsBool[client] = true;
         }
-        else if(StrEqual(cBuffer, "0", false))
-        {
-            g_bEntrySongsBool[client] = false;
-        }
+        //else if(StrEqual(cBuffer, "0", false))
+        //{
+        //    g_bEntrySongsBool[client] = false;
+        //}
     }
 }
 
